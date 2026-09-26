@@ -1,0 +1,31 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('chictoolDesktop', {
+  platform: process.platform,
+  isDesktop: true,
+  authState: () => ipcRenderer.invoke('sqlite:authState'),
+  login: (username, password) => ipcRenderer.invoke('sqlite:login', username, password),
+  register: (username, password) => ipcRenderer.invoke('sqlite:register', username, password),
+  logout: () => ipcRenderer.invoke('sqlite:logout'),
+  lookups: () => ipcRenderer.invoke('sqlite:lookups'),
+  listComputers: () => ipcRenderer.invoke('sqlite:computers:list'),
+  saveComputer: (computer) => ipcRenderer.invoke('sqlite:computers:save', computer),
+  deleteComputer: (id) => ipcRenderer.invoke('sqlite:computers:delete', id),
+  captureComputer: (request) => ipcRenderer.invoke('inventory:capture', request),
+  downloadTargetSetup: () => ipcRenderer.invoke('inventory:downloadTargetSetup'),
+  trustTarget: (hostname) => ipcRenderer.invoke('inventory:trustTarget', hostname),
+  listPeripherals: () => ipcRenderer.invoke('sqlite:peripherals:list'),
+  savePeripheral: (peripheral) => ipcRenderer.invoke('sqlite:peripherals:save', peripheral),
+  deletePeripheral: (id) => ipcRenderer.invoke('sqlite:peripherals:delete', id),
+  getSyncSettings: () => ipcRenderer.invoke('database:syncSettings'),
+  setSyncServer: (serverUrl) => ipcRenderer.invoke('database:setSyncServer', serverUrl),
+  syncDatabase: () => ipcRenderer.invoke('database:sync'),
+  resetDatabase: () => ipcRenderer.invoke('database:reset'),
+  getScanEndpointInfo: () => ipcRenderer.invoke('scan:endpointInfo'),
+  onScanReceived: (listener) => {
+    const handler = (_event, scan) => listener(scan);
+    ipcRenderer.on('scan:fill', handler);
+    return () => ipcRenderer.removeListener('scan:fill', handler);
+  },
+  completeScan: (requestId, result) => ipcRenderer.invoke('scan:complete', requestId, result),
+});

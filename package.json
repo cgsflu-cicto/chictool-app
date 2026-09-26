@@ -1,0 +1,52 @@
+{
+  "name": "chictool-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell for CHICTool's Angular application.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "node launch.cjs",
+    "dev": "cross-env CHICTOOL_WEB_URL=http://localhost:4200 node launch.cjs",
+    "build:web": "npm --prefix ../chictool-web run build -- --base-href ./",
+    "package": "npm run build:web && electron-builder"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "ph.gov.chictool.app",
+    "productName": "CHICTool",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/powershell/pcinfo-worker.ps1",
+        "to": "chictool-powershell/pcinfo-worker.ps1"
+      },
+      {
+        "from": "resources/powershell/target-setup.ps1",
+        "to": "chictool-powershell/target-setup.ps1"
+      },
+      {
+        "from": "resources/powershell/add-trusted-host.ps1",
+        "to": "chictool-powershell/add-trusted-host.ps1"
+      },
+      {
+        "from": "../chictool-web/dist/chictool-web/browser",
+        "to": "angular-web",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable"
+    }
+  }
+}
