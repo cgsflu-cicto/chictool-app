@@ -83,7 +83,7 @@ function Get-InventoryDetails {
     $disks = @(Get-PhysicalDisk | Where-Object { $_.BusType -notin @('USB', 'Unknown') -and $_.MediaType -ne 'Unspecified' })
     $storageParts = (($disks | Select-Object -ExpandProperty FriendlyName | Sort-Object -Unique | ForEach-Object { "$_".Trim() }) -join ', ')
     $memoryParts = (($memory | Select-Object -ExpandProperty PartNumber | Sort-Object -Unique | ForEach-Object { "$_".Trim() }) -join ', ')
-    $hardwareDetails = ("Storage Parts: $storageParts; Memory Parts: $memoryParts" -replace ' +', ' ')
+    $hardwareDetails = ("Storage Parts: $storageParts; `nMemory Parts: $memoryParts" -replace ' +', ' ')
     $serial = Convert-ToCleanString $baseboard.SerialNumber
     if ([string]::IsNullOrWhiteSpace($serial) -or $serial -match '(?i)To Be Filled|Default|None|Unknown|O\.E\.M') {
         $serial = 'UUID:' + (Get-CimInstance Win32_ComputerSystemProduct).UUID
