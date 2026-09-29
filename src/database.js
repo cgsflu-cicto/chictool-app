@@ -578,6 +578,36 @@ function getLookupValues() {
   }, {});
 }
 
+function replaceLookupValues(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('The server did not provide any lookup values.');
+  const values = rows.map((row) => {
+    const source = String(row?.source || '').trim();
+    const value = String(row?.value || '').trim();
+    const label = String(row?.label || '').trim();
+    const sortOrder = Number(row?.sortOrder);
+    if (!source || !value || !label || source.length > 100 || value.length > 255 || label.length > 255 || !Number.isInteger(sortOrder)) {
+      throw new Error('The server returned an invalid lookup value.');
+    }
+    return { source, value, label, sortOrder, isActive: row.isActive ? 1 : 0 };
+  });
+  const sources = new Set(values.map((row) => row.source));
+  for (const source of ['device_type', 'office', 'peripheral_type']) {
+    if (!sources.has(source)) throw new Error(`The server lookup snapshot is missing ${source}.`);
+  }
+  db.exec('BEGIN');
+  try {
+    db.exec('DELETE FROM lookup_values');
+    const insert = db.prepare(`INSERT INTO lookup_values (source, value, label, sortOrder, isActive)
+      VALUES (@source, @value, @label, @sortOrder, @isActive)`);
+    values.forEach((value) => insert.run(value));
+    db.exec('COMMIT');
+    return values.length;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 function saveComputer(input) {
   const user = requireActiveUser();
   const required = ['serialNumber', 'machineType', 'office'];
@@ -673,7 +703,7 @@ function exportInventoryCsv(destination) {
 }
 
 module.exports = {
-  initDatabase, listComputers, listPeripherals, listPeripheralsForSync, listAuditLogs, getLookupValues,
+  initDatabase, listComputers, listPeripherals, listPeripheralsForSync, listAuditLogs, getLookupValues, replaceLookupValues,
   getAuthState, registerUser, authenticateUser, setActiveUser,
   saveComputer, deleteComputer, savePeripheral, deletePeripheral,
   backupDatabase, resetDatabase, exportInventoryCsv

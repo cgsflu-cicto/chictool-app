@@ -322,8 +322,23 @@ async function postToSyncServer(endpoint, payload, recordName) {
     }
 }
 
+async function downloadLookupsFromServer() {
+    if (!syncServerUrl) throw new Error("Set a target server URL before syncing.");
+    let response;
+    try {
+        response = await fetch(`${syncServerUrl}/api/lookups`, { signal: AbortSignal.timeout(15000) });
+    } catch (error) {
+        throw new Error(`Could not download lookup values: ${error.name === "TimeoutError" ? "request timed out" : error.message}`);
+    }
+    if (!response.ok) throw new Error(`Could not download lookup values: ${response.statusText}`);
+    const result = await response.json().catch(() => null);
+    if (!result || !Array.isArray(result.lookups)) throw new Error("The server returned an invalid lookup response.");
+    return database.replaceLookupValues(result.lookups);
+}
+
 async function syncInventoryToServer() {
     if (!syncServerUrl) throw new Error("Set a target server URL before syncing.");
+    const downloadedLookups = await downloadLookupsFromServer();
     const computers = database.listComputers();
     const peripherals = database.listPeripheralsForSync();
     const failures = [];
@@ -368,6 +383,7 @@ async function syncInventoryToServer() {
     }
 
     return {
+        lookups: { downloaded: downloadedLookups },
         computers: { synced: syncedComputers, total: computers.length },
         peripherals: { synced: syncedPeripherals, total: peripherals.length },
         synced: syncedComputers + syncedPeripherals,
