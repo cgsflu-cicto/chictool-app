@@ -14,6 +14,7 @@ const maxScanBodyBytes = 16 * 1024;
 let database;
 let mainWindow;
 let syncServerUrl = "";
+let hotspotName = "CHICTool";
 let scanServer;
 let scanServerError = "";
 const pendingScans = new Map();
@@ -197,6 +198,27 @@ function syncSettingsPath() {
     return path.join(app.getPath("userData"), "sync-settings.json");
 }
 
+function hotspotSettingsPath() {
+    return path.join(app.getPath("userData"), "hotspot-settings.json");
+}
+
+function normalizeHotspotName(value) {
+    const name = String(value || "").trim();
+    if (!name) throw new Error("Hotspot name is required.");
+    if (name.length > 32) throw new Error("Hotspot name must be 32 characters or fewer.");
+    return name;
+}
+
+function loadHotspotName() {
+    try {
+        const saved = JSON.parse(fs.readFileSync(hotspotSettingsPath(), "utf8"));
+        if (Object.prototype.hasOwnProperty.call(saved, "networkName")) return normalizeHotspotName(saved.networkName);
+    } catch (error) {
+        if (error.code !== "ENOENT") console.warn(`Could not read hotspot settings: ${error.message}`);
+    }
+    return process.env.CHICTOOL_HOTSPOT_NAME ? normalizeHotspotName(process.env.CHICTOOL_HOTSPOT_NAME) : "CHICTool";
+}
+
 function normalizeServerUrl(value) {
     const url = new URL(String(value || "").trim());
     if (!["http:", "https:"].includes(url.protocol)) throw new Error("Server URL must use HTTP or HTTPS.");
@@ -222,12 +244,26 @@ function requireDatabaseSession() {
     if (!database.getAuthState().currentUser) throw new Error("Please sign in before using database operations.");
 }
 
+function runHotspot(action, networkName = "", password = "") {
+    if (process.platform !== "win32") return Promise.reject(new Error("Mobile Hotspot is only available on Windows."));
+    const script = powershellResource("hotspot.ps1");
+    return new Promise((resolve, reject) => {
+        execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action, "-NetworkName", networkName, "-Password", password], { windowsHide: true, timeout: 30000 }, (error, stdout, stderr) => {
+            let result;
+            try { result = JSON.parse(stdout.trim()); } catch { return reject(new Error(stderr.trim() || "Mobile Hotspot did not return a valid response.")); }
+            if (error || !result.ok) return reject(new Error(result?.error || stderr.trim() || "Mobile Hotspot operation failed."));
+            resolve(result);
+        });
+    });
+}
+
 function initializeDatabase() {
     const databaseModule = app.isPackaged ? path.join(app.getAppPath(), "src", "database.js") : path.join(__dirname, "..", "src", "database.js");
     process.env.PCINFO_DATA_DIR = app.isPackaged ? path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath("exe")), "data") : developmentDataDir;
     database = require(databaseModule);
     database.initDatabase();
     syncServerUrl = loadSyncServerUrl();
+    hotspotName = loadHotspotName();
 
     ipcMain.handle("sqlite:authState", () => database.getAuthState());
     ipcMain.handle("sqlite:login", (_event, username, password) => {
@@ -270,6 +306,22 @@ function initializeDatabase() {
         requireDatabaseSession();
         return database.resetDatabase();
     });
+    ipcMain.handle("hotspot:settings", () => ({ networkName: hotspotName }));
+    ipcMain.handle("hotspot:setNetworkName", (_event, networkName) => {
+        requireDatabaseSession();
+        hotspotName = normalizeHotspotName(networkName);
+        fs.mkdirSync(path.dirname(hotspotSettingsPath()), { recursive: true });
+        fs.writeFileSync(hotspotSettingsPath(), JSON.stringify({ networkName: hotspotName }, null, 2), "utf8");
+        return { networkName: hotspotName };
+    });
+    ipcMain.handle("hotspot:openWindowsSettings", async () => {
+        requireDatabaseSession();
+        if (process.platform !== "win32") throw new Error("Windows Mobile Hotspot settings are only available on Windows.");
+        await shell.openExternal("ms-settings:network-mobilehotspot");
+    });
+    ipcMain.handle("hotspot:status", () => { requireDatabaseSession(); return runHotspot("Status"); });
+    ipcMain.handle("hotspot:start", (_event, networkName, password) => { requireDatabaseSession(); return runHotspot("Start", normalizeHotspotName(networkName), String(password || "")); });
+    ipcMain.handle("hotspot:stop", () => { requireDatabaseSession(); return runHotspot("Stop"); });
     ipcMain.handle("scan:endpointInfo", () => scanEndpointInfo());
     ipcMain.handle("scan:complete", (event, requestId, result) => {
         if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error("Scan acknowledgment is not authorized.");

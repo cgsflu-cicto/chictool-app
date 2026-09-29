@@ -38,6 +38,10 @@
         "to": "chictool-powershell/add-trusted-host.ps1"
       },
       {
+        "from": "resources/powershell/hotspot.ps1",
+        "to": "chictool-powershell/hotspot.ps1"
+      },
+      {
         "from": "../chictool-web/dist/chictool-web/browser",
         "to": "angular-web",
         "filter": [

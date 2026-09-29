@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld('chictoolDesktop', {
   setSyncServer: (serverUrl) => ipcRenderer.invoke('database:setSyncServer', serverUrl),
   syncDatabase: () => ipcRenderer.invoke('database:sync'),
   resetDatabase: () => ipcRenderer.invoke('database:reset'),
+  getHotspotSettings: () => ipcRenderer.invoke('hotspot:settings'),
+  setHotspotName: (networkName) => ipcRenderer.invoke('hotspot:setNetworkName', networkName),
+  openWindowsHotspotSettings: () => ipcRenderer.invoke('hotspot:openWindowsSettings'),
+  getHotspotStatus: () => ipcRenderer.invoke('hotspot:status'),
+  startHotspot: (networkName, password) => ipcRenderer.invoke('hotspot:start', networkName, password),
+  stopHotspot: () => ipcRenderer.invoke('hotspot:stop'),
   getScanEndpointInfo: () => ipcRenderer.invoke('scan:endpointInfo'),
   onScanReceived: (listener) => {
     const handler = (_event, scan) => listener(scan);
