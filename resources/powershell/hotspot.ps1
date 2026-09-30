@@ -43,10 +43,29 @@ try {
     }
     if ($Action -eq 'Stop') {
         $resultType = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringOperationResult, Windows, ContentType=WindowsRuntime]
-        $result = Await-WinRt ($manager.StopTetheringAsync()) $resultType
-        if ($result.Status.ToString() -ne 'Success') { throw "Could not stop Mobile Hotspot: $($result.Status) $($result.AdditionalErrorMessage)" }
+        $stopError = $null
+        try {
+            $result = Await-WinRt ($manager.StopTetheringAsync()) $resultType
+            if ($result.Status.ToString() -ne 'Success') {
+                $stopError = "Windows returned $($result.Status) $($result.AdditionalErrorMessage)"
+            }
+        } catch {
+            $stopError = $_.Exception.Message
+        }
+        if ($stopError) {
+            $deadline = (Get-Date).AddSeconds(5)
+            do {
+                if ($manager.TetheringOperationalState.ToString() -eq 'Off') {
+                    $stopError = $null
+                    break
+                }
+                Start-Sleep -Milliseconds 500
+            } while ((Get-Date) -lt $deadline)
+            if ($stopError) { throw "Could not stop Mobile Hotspot: $stopError" }
+        }
     }
-    [pscustomobject]@{ ok = $true; state = $manager.TetheringOperationalState.ToString(); clientCount = $manager.GetTetheringClients().Count; networkName = $NetworkName } | ConvertTo-Json -Compress
+    $accessPoint = $manager.GetCurrentAccessPointConfiguration()
+    [pscustomobject]@{ ok = $true; state = $manager.TetheringOperationalState.ToString(); clientCount = @($manager.GetTetheringClients()).Count; networkName = $accessPoint.Ssid } | ConvertTo-Json -Compress
 } catch {
     [pscustomobject]@{ ok = $false; error = $_.Exception.Message } | ConvertTo-Json -Compress
     exit 1

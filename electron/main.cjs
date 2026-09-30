@@ -143,20 +143,56 @@ async function handleScanRequest(request, response) {
 
 function localScanAddresses() {
     const addresses = [];
-    for (const entries of Object.values(os.networkInterfaces())) {
+    for (const [interfaceName, entries] of Object.entries(os.networkInterfaces())) {
+        if (/^vEthernet(?:\s|$)/i.test(interfaceName)) continue;
         for (const entry of entries || []) {
-            if (!entry.internal && (entry.family === "IPv4" || entry.family === 4)) addresses.push(entry.address);
+            const isIpv4 = entry.family === "IPv4" || entry.family === 4;
+            const isLinkLocal = isIpv4 && entry.address.startsWith("169.254.");
+            if (!entry.internal && isIpv4 && !isLinkLocal) {
+                addresses.push({ interfaceName, address: entry.address });
+            }
         }
     }
-    return [...new Set(addresses)].sort();
+    return [...new Map(addresses.map((entry) => [entry.address, entry])).values()].sort((a, b) => a.interfaceName.localeCompare(b.interfaceName) || a.address.localeCompare(b.address));
 }
 
-function scanEndpointInfo() {
+function readConnectedWifiSsid() {
+    if (process.platform !== "win32") return Promise.resolve("");
+    return new Promise((resolve) => {
+        execFile("netsh.exe", ["wlan", "show", "interfaces"], { windowsHide: true, timeout: 5000 }, (error, stdout) => {
+            if (error) return resolve("");
+            const match = stdout.match(/^\s*SSID\s*:\s*(.+?)\s*$/im);
+            resolve(match?.[1] || "");
+        });
+    });
+}
+
+async function scanEndpointInfo() {
+    const wifiSsidPromise = readConnectedWifiSsid();
+    let activeHotspot = null;
+    try {
+        activeHotspot = await runHotspot("Status");
+    } catch {
+        // Scanner endpoint discovery remains available if hotspot status cannot be read.
+    }
+    const wifiSsid = await wifiSsidPromise;
     const addresses = localScanAddresses();
+    const endpoints = addresses.map(({ interfaceName, address }) => {
+        const isHotspot = activeHotspot?.state === "On" && /^Local Area Connection\*/i.test(interfaceName);
+        return {
+            interfaceName: isHotspot ? "Hotspot Gateway" : interfaceName,
+            networkName: isHotspot
+                ? activeHotspot.networkName || hotspotName
+                : /^(wi-?fi|wlan)/i.test(interfaceName) && wifiSsid ? wifiSsid : interfaceName,
+            address,
+            url: `http://${address}:${scanPort}/scan`
+        };
+    });
     return {
         enabled: Boolean(scanServer?.listening),
         port: scanPort,
-        urls: addresses.map((address) => `http://${address}:${scanPort}/scan`),
+        urls: endpoints.map((endpoint) => endpoint.url),
+        endpoints,
         error: scanServerError
     };
 }
@@ -351,7 +387,7 @@ function initializeDatabase() {
         if (process.platform !== "win32") throw new Error("Windows Mobile Hotspot settings are only available on Windows.");
         await shell.openExternal("ms-settings:network-mobilehotspot");
     });
-    ipcMain.handle("hotspot:status", () => { requireDatabaseSession(); return runHotspot("Status"); });
+    ipcMain.handle("hotspot:status", () => runHotspot("Status"));
     ipcMain.handle("hotspot:start", (_event, networkName, password) => { requireDatabaseSession(); return runHotspot("Start", normalizeHotspotName(networkName), String(password || "")); });
     ipcMain.handle("hotspot:stop", () => { requireDatabaseSession(); return runHotspot("Stop"); });
     ipcMain.handle("scan:endpointInfo", () => scanEndpointInfo());
