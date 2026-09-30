@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('chictoolDesktop', {
   syncDatabase: () => ipcRenderer.invoke('database:sync'),
   resetDatabase: () => ipcRenderer.invoke('database:reset'),
   getHotspotSettings: () => ipcRenderer.invoke('hotspot:settings'),
-  setHotspotName: (networkName) => ipcRenderer.invoke('hotspot:setNetworkName', networkName),
+  setHotspotName: (networkName, password) => ipcRenderer.invoke('hotspot:setNetworkName', networkName, password),
   openWindowsHotspotSettings: () => ipcRenderer.invoke('hotspot:openWindowsSettings'),
   getHotspotStatus: () => ipcRenderer.invoke('hotspot:status'),
   startHotspot: (networkName, password) => ipcRenderer.invoke('hotspot:start', networkName, password),

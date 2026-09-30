@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
 const { createServer } = require("node:http");
 const { randomUUID } = require("node:crypto");
 const path = require("node:path");
@@ -15,6 +15,7 @@ let database;
 let mainWindow;
 let syncServerUrl = "";
 let hotspotName = "CHICTool";
+let hotspotPassword = "";
 let scanServer;
 let scanServerError = "";
 const pendingScans = new Map();
@@ -209,14 +210,46 @@ function normalizeHotspotName(value) {
     return name;
 }
 
-function loadHotspotName() {
+function loadHotspotSettings() {
+    let saved = {};
     try {
-        const saved = JSON.parse(fs.readFileSync(hotspotSettingsPath(), "utf8"));
-        if (Object.prototype.hasOwnProperty.call(saved, "networkName")) return normalizeHotspotName(saved.networkName);
+        saved = JSON.parse(fs.readFileSync(hotspotSettingsPath(), "utf8"));
     } catch (error) {
         if (error.code !== "ENOENT") console.warn(`Could not read hotspot settings: ${error.message}`);
     }
-    return process.env.CHICTOOL_HOTSPOT_NAME ? normalizeHotspotName(process.env.CHICTOOL_HOTSPOT_NAME) : "CHICTool";
+    let password = "";
+    if (saved.passwordEncrypted) {
+        try {
+            if (!safeStorage.isEncryptionAvailable()) throw new Error("Secure password storage is unavailable.");
+            password = safeStorage.decryptString(Buffer.from(saved.passwordEncrypted, "base64"));
+        } catch (error) {
+            console.warn(`Could not decrypt saved hotspot password: ${error.message}`);
+        }
+    }
+    return {
+        networkName: Object.prototype.hasOwnProperty.call(saved, "networkName")
+            ? normalizeHotspotName(saved.networkName)
+            : process.env.CHICTOOL_HOTSPOT_NAME ? normalizeHotspotName(process.env.CHICTOOL_HOTSPOT_NAME) : "CHICTool",
+        password
+    };
+}
+
+function saveHotspotSettings(networkName, password) {
+    const normalizedName = normalizeHotspotName(networkName);
+    const normalizedPassword = String(password || "");
+    if (normalizedPassword && !safeStorage.isEncryptionAvailable()) {
+        throw new Error("Secure password storage is unavailable on this device.");
+    }
+    fs.mkdirSync(path.dirname(hotspotSettingsPath()), { recursive: true });
+    fs.writeFileSync(hotspotSettingsPath(), JSON.stringify({
+        networkName: normalizedName,
+        passwordEncrypted: normalizedPassword
+            ? safeStorage.encryptString(normalizedPassword).toString("base64")
+            : ""
+    }, null, 2), "utf8");
+    hotspotName = normalizedName;
+    hotspotPassword = normalizedPassword;
+    return { networkName: hotspotName, password: hotspotPassword };
 }
 
 function normalizeServerUrl(value) {
@@ -263,7 +296,9 @@ function initializeDatabase() {
     database = require(databaseModule);
     database.initDatabase();
     syncServerUrl = loadSyncServerUrl();
-    hotspotName = loadHotspotName();
+    const hotspotSettings = loadHotspotSettings();
+    hotspotName = hotspotSettings.networkName;
+    hotspotPassword = hotspotSettings.password;
 
     ipcMain.handle("sqlite:authState", () => database.getAuthState());
     ipcMain.handle("sqlite:login", (_event, username, password) => {
@@ -306,13 +341,10 @@ function initializeDatabase() {
         requireDatabaseSession();
         return database.resetDatabase();
     });
-    ipcMain.handle("hotspot:settings", () => ({ networkName: hotspotName }));
-    ipcMain.handle("hotspot:setNetworkName", (_event, networkName) => {
+    ipcMain.handle("hotspot:settings", () => ({ networkName: hotspotName, password: hotspotPassword }));
+    ipcMain.handle("hotspot:setNetworkName", (_event, networkName, password) => {
         requireDatabaseSession();
-        hotspotName = normalizeHotspotName(networkName);
-        fs.mkdirSync(path.dirname(hotspotSettingsPath()), { recursive: true });
-        fs.writeFileSync(hotspotSettingsPath(), JSON.stringify({ networkName: hotspotName }, null, 2), "utf8");
-        return { networkName: hotspotName };
+        return saveHotspotSettings(networkName, password);
     });
     ipcMain.handle("hotspot:openWindowsSettings", async () => {
         requireDatabaseSession();
