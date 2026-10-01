@@ -1,6 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
 const { createServer } = require("node:http");
-const { randomUUID } = require("node:crypto");
+const { randomInt, randomUUID } = require("node:crypto");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
@@ -14,8 +14,13 @@ const maxScanBodyBytes = 16 * 1024;
 let database;
 let mainWindow;
 let syncServerUrl = "";
-let hotspotName = "CHICTool";
-let hotspotPassword = "";
+const hotspotAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+function randomHotspotValue(length) {
+    return Array.from({ length }, () => hotspotAlphabet[randomInt(hotspotAlphabet.length)]).join("");
+}
+
+let hotspotName = `CHICTool-${randomHotspotValue(5)}`;
+let hotspotPassword = randomHotspotValue(10);
 let scanServer;
 let scanServerError = "";
 const pendingScans = new Map();
@@ -265,8 +270,8 @@ function loadHotspotSettings() {
     return {
         networkName: Object.prototype.hasOwnProperty.call(saved, "networkName")
             ? normalizeHotspotName(saved.networkName)
-            : process.env.CHICTOOL_HOTSPOT_NAME ? normalizeHotspotName(process.env.CHICTOOL_HOTSPOT_NAME) : "CHICTool",
-        password
+            : process.env.CHICTOOL_HOTSPOT_NAME ? normalizeHotspotName(process.env.CHICTOOL_HOTSPOT_NAME) : `CHICTool-${randomHotspotValue(5)}`,
+        password: password || randomHotspotValue(10)
     };
 }
 
