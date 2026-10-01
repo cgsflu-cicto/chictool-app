@@ -24,8 +24,27 @@ function Await-WinRtAction([object]$Operation) {
     $task.GetAwaiter().GetResult()
 }
 
+function Test-ScanFirewallRule {
+    $firewallRuleName = 'CHICTool-Network-Scan-In-TCP'
+    $rules = Get-NetFirewallRule -Name $firewallRuleName -ErrorAction SilentlyContinue
+    foreach ($rule in $rules) {
+        if ($rule.Enabled -ne 'True' -or $rule.Direction -ne 'Inbound' -or $rule.Action -ne 'Allow') { continue }
+        $portFilters = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue
+        foreach ($portFilter in $portFilters) {
+            if ($portFilter.Protocol -in @('TCP', '6') -and [string]$portFilter.LocalPort -eq [string]$ScanPort) {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
 try {
     if ($Action -eq 'Firewall') {
+        if (Test-ScanFirewallRule) {
+            [pscustomobject]@{ ok = $true } | ConvertTo-Json -Compress
+            exit 0
+        }
         $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Action FirewallAdmin -ScanPort $ScanPort"
         $elevated = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -Wait -PassThru
         if ($elevated.ExitCode -ne 0) { throw 'Could not add the CHICTool scan endpoint to Windows Firewall. Approve the Windows permission prompt and try again.' }
@@ -35,6 +54,10 @@ try {
 
     if ($Action -eq 'FirewallAdmin') {
         $firewallRuleName = 'CHICTool-Network-Scan-In-TCP'
+        if (Test-ScanFirewallRule) {
+            [pscustomobject]@{ ok = $true } | ConvertTo-Json -Compress
+            exit 0
+        }
         $existingRule = Get-NetFirewallRule -Name $firewallRuleName -ErrorAction SilentlyContinue
         if ($existingRule) {
             $existingRule | Remove-NetFirewallRule
