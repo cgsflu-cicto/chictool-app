@@ -313,11 +313,18 @@ function requireDatabaseSession() {
     if (!database.getAuthState().currentUser) throw new Error("Please sign in before using database operations.");
 }
 
+function addScanFirewallExceptionAfterLogin() {
+    if (process.platform !== "win32") return;
+    void runHotspot("Firewall").catch((error) => {
+        console.error(`Could not add the CHICTool scan endpoint to Windows Firewall: ${error.message}`);
+    });
+}
+
 function runHotspot(action, networkName = "", password = "") {
     if (process.platform !== "win32") return Promise.reject(new Error("Mobile Hotspot is only available on Windows."));
     const script = powershellResource("hotspot.ps1");
     return new Promise((resolve, reject) => {
-        execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action, "-NetworkName", networkName, "-Password", password], { windowsHide: true, timeout: 30000 }, (error, stdout, stderr) => {
+        execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action, "-NetworkName", networkName, "-Password", password, "-ScanPort", String(scanPort)], { windowsHide: true, timeout: action === "Firewall" ? 120000 : 30000 }, (error, stdout, stderr) => {
             let result;
             try { result = JSON.parse(stdout.trim()); } catch { return reject(new Error(stderr.trim() || "Mobile Hotspot did not return a valid response.")); }
             if (error || !result.ok) return reject(new Error(result?.error || stderr.trim() || "Mobile Hotspot operation failed."));
@@ -340,11 +347,15 @@ function initializeDatabase() {
     ipcMain.handle("sqlite:login", (_event, username, password) => {
         const user = database.authenticateUser(username, password);
         database.setActiveUser(user);
+        addScanFirewallExceptionAfterLogin();
         return database.getAuthState();
     });
     ipcMain.handle("sqlite:register", (_event, username, password) => {
         const user = database.registerUser(username, password);
-        if (!database.getAuthState().currentUser) database.setActiveUser(user);
+        if (!database.getAuthState().currentUser) {
+            database.setActiveUser(user);
+            addScanFirewallExceptionAfterLogin();
+        }
         return database.getAuthState();
     });
     ipcMain.handle("sqlite:logout", () => {

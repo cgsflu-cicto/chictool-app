@@ -1,7 +1,8 @@
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('Status', 'Start', 'Stop')][string]$Action,
+    [Parameter(Mandatory = $true)][ValidateSet('Status', 'Start', 'Stop', 'Firewall', 'FirewallAdmin')][string]$Action,
     [string]$NetworkName,
-    [string]$Password
+    [string]$Password,
+    [ValidateRange(1, 65535)][int]$ScanPort = 47831
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +25,25 @@ function Await-WinRtAction([object]$Operation) {
 }
 
 try {
+    if ($Action -eq 'Firewall') {
+        $arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Action FirewallAdmin -ScanPort $ScanPort"
+        $elevated = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs -WindowStyle Hidden -Wait -PassThru
+        if ($elevated.ExitCode -ne 0) { throw 'Could not add the CHICTool scan endpoint to Windows Firewall. Approve the Windows permission prompt and try again.' }
+        [pscustomobject]@{ ok = $true } | ConvertTo-Json -Compress
+        exit 0
+    }
+
+    if ($Action -eq 'FirewallAdmin') {
+        $firewallRuleName = 'CHICTool-Network-Scan-In-TCP'
+        $existingRule = Get-NetFirewallRule -Name $firewallRuleName -ErrorAction SilentlyContinue
+        if ($existingRule) {
+            $existingRule | Remove-NetFirewallRule
+        }
+        New-NetFirewallRule -Name $firewallRuleName -DisplayName 'CHICTool Network Scan Endpoint' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $ScanPort -Profile Any | Out-Null
+        [pscustomobject]@{ ok = $true } | ConvertTo-Json -Compress
+        exit 0
+    }
+
     $profile = [Windows.Networking.Connectivity.NetworkInformation, Windows, ContentType=WindowsRuntime]::GetInternetConnectionProfile()
     if (-not $profile) { throw 'No active internet connection is available to share.' }
     $managerType = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager, Windows, ContentType=WindowsRuntime]
