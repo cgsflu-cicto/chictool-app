@@ -109,7 +109,7 @@ try {
     $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
     if ($request.mode -eq 'remote') {
         if ([string]::IsNullOrWhiteSpace($request.hostname)) { throw 'Hostname is required.' }
-        $credential = New-WorkerCredential -Username ([string]$request.username) -PlaintextPassword ([string]$request.password)
+        $credential = New-WorkerCredential -Username ([string]$request.username) -Passkey ([string]$request.password)
         $request.password = $null
         if ($request.operation -eq 'test') {
             $data = Invoke-Command -ComputerName ([string]$request.hostname) -Credential $credential -ScriptBlock {

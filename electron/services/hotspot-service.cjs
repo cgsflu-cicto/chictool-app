@@ -67,7 +67,7 @@ function createHotspotService({ app, safeStorage, execFile, scanPort, powershell
         const script = powershellResource("hotspot.ps1");
 
         return new Promise((resolve, reject) => {
-            execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action, "-NetworkName", name, "-Password", secret, "-ScanPort", String(scanPort)], { windowsHide: true, timeout: action === "Firewall" ? 120000 : 30000 }, (error, stdout, stderr) => {
+            execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Action", action, "-NetworkName", name, "-Passkey", secret, "-ScanPort", String(scanPort)], { windowsHide: true, timeout: action === "Firewall" ? 120000 : 30000 }, (error, stdout, stderr) => {
                 let result;
                 try { result = JSON.parse(stdout.trim()); } catch { return reject(new Error(stderr.trim() || "Mobile Hotspot did not return a valid response.")); }
                 if (error || !result.ok) return reject(new Error(result?.error || stderr.trim() || "Mobile Hotspot operation failed."));
