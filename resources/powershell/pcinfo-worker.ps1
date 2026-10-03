@@ -3,14 +3,14 @@ $ErrorActionPreference = 'Stop'
 function New-WorkerCredential {
     param(
         [string]$Username,
-        [string]$PlaintextPassword
+        [string]$Passkey
     )
 
     # The password arrives through stdin and is never written to disk or logs.
     # PSCredential still requires a SecureString for WinRM, so build it directly
     # with .NET instead of depending on Microsoft.PowerShell.Security.
     $securePassword = New-Object System.Security.SecureString
-    foreach ($character in $PlaintextPassword.ToCharArray()) {
+    foreach ($character in $Passkey.ToCharArray()) {
         $securePassword.AppendChar($character)
     }
     $securePassword.MakeReadOnly()
@@ -109,32 +109,32 @@ try {
     $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
     if ($request.mode -eq 'remote') {
         if ([string]::IsNullOrWhiteSpace($request.hostname)) { throw 'Hostname is required.' }
-    $credential = New-WorkerCredential -Username ([string]$request.username) -PlaintextPassword ([string]$request.password)
-    $request.password = $null
-    if ($request.operation -eq 'test') {
-        $data = Invoke-Command -ComputerName ([string]$request.hostname) -Credential $credential -ScriptBlock {
-            [PSCustomObject]@{ hostname = $env:COMPUTERNAME }
-        } -ErrorAction Stop
-    } else {
-    $definition = @(
-            'function Convert-ToCleanString {'
-            ${function:Convert-ToCleanString}.ToString()
-            '}'
-            'function Get-MarketedDiskSize {'
-            ${function:Get-MarketedDiskSize}.ToString()
-            '}'
-            'function Get-MatchedMacAddress {'
-            ${function:Get-MatchedMacAddress}.ToString()
-            '}'
-            'function Get-InventoryDetails {'
-            ${function:Get-InventoryDetails}.ToString()
-            '}'
-        ) -join "`n"
-        $data = Invoke-Command -ComputerName ([string]$request.hostname) -Credential $credential -ScriptBlock {
-            param($functionDefinition, $targetAddress)
-            . ([scriptblock]::Create($functionDefinition)); Get-InventoryDetails -TargetAddress $targetAddress
-        } -ArgumentList $definition, ([string]$request.hostname) -ErrorAction Stop
-    }
+        $credential = New-WorkerCredential -Username ([string]$request.username) -PlaintextPassword ([string]$request.password)
+        $request.password = $null
+        if ($request.operation -eq 'test') {
+            $data = Invoke-Command -ComputerName ([string]$request.hostname) -Credential $credential -ScriptBlock {
+                [PSCustomObject]@{ hostname = $env:COMPUTERNAME }
+            } -ErrorAction Stop
+        } else {
+            $definition = @(
+                'function Convert-ToCleanString {'
+                ${function:Convert-ToCleanString}.ToString()
+                '}'
+                'function Get-MarketedDiskSize {'
+                ${function:Get-MarketedDiskSize}.ToString()
+                '}'
+                'function Get-MatchedMacAddress {'
+                ${function:Get-MatchedMacAddress}.ToString()
+                '}'
+                'function Get-InventoryDetails {'
+                ${function:Get-InventoryDetails}.ToString()
+                '}'
+            ) -join "`n"
+            $data = Invoke-Command -ComputerName ([string]$request.hostname) -Credential $credential -ScriptBlock {
+                param($functionDefinition, $targetAddress)
+                . ([scriptblock]::Create($functionDefinition)); Get-InventoryDetails -TargetAddress $targetAddress
+            } -ArgumentList $definition, ([string]$request.hostname) -ErrorAction Stop
+        }
     } else {
         $data = Get-InventoryDetails
     }

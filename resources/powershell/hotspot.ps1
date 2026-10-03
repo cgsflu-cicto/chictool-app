@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][ValidateSet('Status', 'Start', 'Stop', 'Firewall', 'FirewallAdmin')][string]$Action,
     [string]$NetworkName,
-    [string]$Password,
+    [string]$Passkey,
     [ValidateRange(1, 65535)][int]$ScanPort = 4783
 )
 
@@ -75,10 +75,10 @@ try {
     $manager = $managerType::CreateFromConnectionProfile($connectionProfile)
     if ($Action -eq 'Start') {
         if ([string]::IsNullOrWhiteSpace($NetworkName)) { throw 'Hotspot name is required.' }
-        if ([string]::IsNullOrWhiteSpace($Password) -or $Password.Length -lt 8) { throw 'Hotspot password must be at least 8 characters.' }
+        if ([string]::IsNullOrWhiteSpace($Passkey) -or $Passkey.Length -lt 8) { throw 'Hotspot password must be at least 8 characters.' }
         $configuration = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringAccessPointConfiguration, Windows, ContentType=WindowsRuntime]::new()
         $configuration.Ssid = $NetworkName
-        $configuration.Passphrase = $Password
+        $configuration.Passphrase = $Passkey
         Wait-WinRtAction ($manager.ConfigureAccessPointAsync($configuration))
         $resultType = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringOperationResult, Windows, ContentType=WindowsRuntime]
         $result = Wait-WinRt ($manager.StartTetheringAsync()) $resultType
