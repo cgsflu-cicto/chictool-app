@@ -9,8 +9,8 @@ const { toComputer, fromComputer, toPeripheral, fromPeripheral } = require("./ma
 
 const developmentUrl = process.env.CHICTOOL_WEB_URL;
 const developmentDataDir = path.resolve(__dirname, "..", "data");
-const scanPortValue = Number(process.env.CHICTOOL_SCAN_PORT || 47831);
-const scanPort = Number.isInteger(scanPortValue) && scanPortValue > 0 && scanPortValue <= 65535 ? scanPortValue : 47831;
+const scanPortValue = Number(process.env.CHICTOOL_SCAN_PORT || 4783);
+const scanPort = Number.isInteger(scanPortValue) && scanPortValue > 0 && scanPortValue <= 65535 ? scanPortValue : 4783;
 let database;
 let mainWindow;
 let inventory;

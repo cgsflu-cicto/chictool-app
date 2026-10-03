@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('Status', 'Start', 'Stop', 'Firewall', 'FirewallAdmin')][string]$Action,
     [string]$NetworkName,
     [string]$Password,
-    [ValidateRange(1, 65535)][int]$ScanPort = 47831
+    [ValidateRange(1, 65535)][int]$ScanPort = 4783
 )
 
 $ErrorActionPreference = 'Stop'
