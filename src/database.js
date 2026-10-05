@@ -181,6 +181,7 @@ function migrateUserOwnership() {
   ensureColumn('computers', 'updatedBy');
   ensureColumn('peripherals', 'createdBy');
   ensureColumn('peripherals', 'updatedBy');
+  ensureColumn('peripherals', 'remarks');
   ensureColumn('computers', 'deletedAt');
   ensureColumn('computers', 'deletedBy');
   ensureColumn('peripherals', 'deletedAt');
