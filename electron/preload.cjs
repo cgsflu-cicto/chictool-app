@@ -12,6 +12,17 @@ contextBridge.exposeInMainWorld('chictoolDesktop', {
   saveComputer: (computer) => ipcRenderer.invoke('sqlite:computers:save', computer),
   deleteComputer: (id) => ipcRenderer.invoke('sqlite:computers:delete', id),
   captureComputer: (request) => ipcRenderer.invoke('inventory:capture', request),
+  getPushConfig: () => ipcRenderer.invoke('push:config'),
+  testPushServer: (serverUrl) => ipcRenderer.invoke('push:testServer', serverUrl),
+  setPushServer: (serverUrl) => ipcRenderer.invoke('push:setServer', serverUrl),
+  pushLocalCapture: () => ipcRenderer.invoke('push:captureAndSend'),
+  getPushInbox: () => ipcRenderer.invoke('push:inbox'),
+  decidePush: (id, action, computer) => ipcRenderer.invoke('push:decide', id, action, computer),
+  onPushReceived: (listener) => {
+    const handler = (_event, submission) => listener(submission);
+    ipcRenderer.on('push:received', handler);
+    return () => ipcRenderer.removeListener('push:received', handler);
+  },
   downloadTargetSetup: () => ipcRenderer.invoke('inventory:downloadTargetSetup'),
   trustTarget: (hostname) => ipcRenderer.invoke('inventory:trustTarget', hostname),
   listPeripherals: () => ipcRenderer.invoke('sqlite:peripherals:list'),

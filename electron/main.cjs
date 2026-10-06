@@ -5,6 +5,7 @@ const { createInventoryService } = require("./services/inventory-service.cjs");
 const { createHotspotService } = require("./services/hotspot-service.cjs");
 const { createScanService } = require("./services/scan-service.cjs");
 const { createSyncService } = require("./services/sync-service.cjs");
+const { createPushService } = require("./services/push-service.cjs");
 const { toComputer, fromComputer, toPeripheral, fromPeripheral } = require("./mappers/inventory-mappers.cjs");
 
 const developmentUrl = process.env.CHICTOOL_WEB_URL;
@@ -17,6 +18,7 @@ let inventory;
 let hotspot;
 let scan;
 let sync;
+let push;
 
 function normalizeServerUrl(value) {
     const url = new URL(String(value || "").trim());
@@ -46,12 +48,14 @@ function initializeDatabase() {
     hotspot = createHotspotService({ app, safeStorage, execFile, scanPort, powershellResource });
     inventory = createInventoryService({ app, dialog, spawn, execFile, getWindow: () => mainWindow, powershellResource });
     sync = createSyncService({ app, database, normalizeServerUrl });
+    push = createPushService({ app, getWindow: () => mainWindow, database, normalizeServerUrl });
     scan = createScanService({
         getWindow: () => mainWindow,
         runHotspot: (...args) => hotspot.run(...args),
         getHotspotName: () => hotspot.getNetworkName(),
         scanPort,
-        execFile
+        execFile,
+        handlePushRequest: (...args) => push.handleRequest(...args)
     });
     registerIpcHandlers();
 }
@@ -81,6 +85,15 @@ function registerIpcHandlers() {
     ipcMain.handle("sqlite:computers:save", (_event, computer) => toComputer(database.saveComputer(fromComputer(computer))));
     ipcMain.handle("sqlite:computers:delete", (_event, id) => database.deleteComputer(id));
     ipcMain.handle("inventory:capture", (_event, request) => inventory.captureComputer(request));
+    ipcMain.handle("push:config", () => push.getConfig());
+    ipcMain.handle("push:testServer", (_event, serverUrl) => push.testServer(serverUrl));
+    ipcMain.handle("push:setServer", (_event, serverUrl) => push.setConfig(serverUrl));
+    ipcMain.handle("push:captureAndSend", async () => push.sendCapture(await inventory.captureComputer({ mode: "local" })));
+    ipcMain.handle("push:inbox", () => push.listPending());
+    ipcMain.handle("push:decide", (_event, id, action, computer) => {
+        if (action === "save") requireDatabaseSession();
+        return push.decide(id, action, computer);
+    });
     ipcMain.handle("inventory:downloadTargetSetup", () => inventory.downloadTargetSetup());
     ipcMain.handle("inventory:trustTarget", (_event, hostname) => inventory.trustTarget(hostname));
     ipcMain.handle("sqlite:peripherals:list", () => database.listPeripherals(null, "all").map(toPeripheral));

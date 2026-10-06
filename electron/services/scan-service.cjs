@@ -2,7 +2,7 @@ const { createServer } = require("node:http");
 const { randomUUID } = require("node:crypto");
 const os = require("node:os");
 
-function createScanService({ getWindow, runHotspot, getHotspotName, scanPort, execFile }) {
+function createScanService({ getWindow, runHotspot, getHotspotName, scanPort, execFile, handlePushRequest }) {
     const maxBodyBytes = 16 * 1024;
     const pendingScans = new Map();
     let server;
@@ -68,6 +68,7 @@ function createScanService({ getWindow, runHotspot, getHotspotName, scanPort, ex
         try { pathname = new URL(request.url || "/", "http://localhost").pathname; }
         catch { return reject(request, response, 400, "Invalid request URL."); }
         console.info(`[scan] Request from ${client}: ${request.method} ${pathname}`);
+        if (pathname.startsWith("/push")) return handlePushRequest(request, response, pathname);
         if (pathname !== "/scan") return reject(request, response, 404, "Not found.");
         if (request.method !== "POST") { response.setHeader("allow", "POST"); return reject(request, response, 405, "Use POST /scan."); }
         if (String(request.headers["content-type"] || "").split(";", 1)[0].trim().toLowerCase() !== "application/json") return reject(request, response, 415, "Content-Type must be application/json.");
