@@ -522,9 +522,12 @@ function savePeripheral(input) {
     if (duplicateSerial) throw new Error(`Serial number "${values.serialNumber}" is already used by another peripheral.`);
   }
   if (existingId) {
+    const updateValues = { ...values, id: existingId };
+    delete updateValues.syncId;
+    delete updateValues.createdBy;
     db.prepare(`UPDATE peripherals SET computerId=@computerId, type=@type, manufacturer=@manufacturer,
       model=@model, serialNumber=@serialNumber, assetTag=@assetTag, assignedUser=@assignedUser,
-      remarks=@remarks, updatedBy=@updatedBy, deletedAt=NULL, deletedBy=NULL WHERE id=@id`).run({ ...values, id: existingId });
+      remarks=@remarks, updatedBy=@updatedBy, deletedAt=NULL, deletedBy=NULL WHERE id=@id`).run(updateValues);
     const updated = db.prepare('SELECT * FROM peripherals WHERE id = ?').get(existingId);
     if (!updated) throw new Error('Peripheral record was not found.');
     writeAudit('peripheral', existingId, 'update', updated);
