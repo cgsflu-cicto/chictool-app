@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const path = require("node:path");
 
 const computerSyncFields = [
     "serialNumber", "serialOverride", "manufacturer", "model", "operatingSystem", "processor", "storage", "memory", "gpu",
@@ -8,14 +9,29 @@ const computerSyncFields = [
 const peripheralSyncFields = ["syncId", "computerSerialNumber", "type", "manufacturer", "model", "serialNumber", "assetTag", "assignedUser", "remarks"];
 
 function createSyncService({ app, database, normalizeServerUrl }) {
-    const settingsPath = () => require("node:path").join(app.getPath("userData"), "sync-settings.json");
+    const dataDir = () => app.isPackaged
+        ? path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath("exe")), "data")
+        : path.resolve(__dirname, "..", "..", "data");
+    const settingsPath = () => path.join(dataDir(), "sync.txt");
+    const legacySettingsPath = () => path.join(app.getPath("userData"), "sync-settings.json");
 
     function loadServerUrl() {
         try {
-            const saved = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
-            if (Object.prototype.hasOwnProperty.call(saved, "serverUrl")) return saved.serverUrl ? normalizeServerUrl(saved.serverUrl) : "";
+            const saved = fs.readFileSync(settingsPath(), "utf8").trim();
+            return saved ? normalizeServerUrl(saved) : "";
         } catch (error) {
             if (error.code !== "ENOENT") console.warn(`Could not read sync settings: ${error.message}`);
+            else {
+                try {
+                    const legacy = JSON.parse(fs.readFileSync(legacySettingsPath(), "utf8"));
+                    const serverUrl = legacy.serverUrl ? normalizeServerUrl(legacy.serverUrl) : "";
+                    fs.mkdirSync(dataDir(), { recursive: true });
+                    fs.writeFileSync(settingsPath(), `${serverUrl}\n`, "utf8");
+                    return serverUrl;
+                } catch (legacyError) {
+                    if (legacyError.code !== "ENOENT") console.warn(`Could not migrate sync settings: ${legacyError.message}`);
+                }
+            }
         }
         return process.env.CHICTOOL_SERVER_URL ? normalizeServerUrl(process.env.CHICTOOL_SERVER_URL) : "";
     }
@@ -24,8 +40,8 @@ function createSyncService({ app, database, normalizeServerUrl }) {
 
     function setServerUrl(value) {
         serverUrl = String(value || "").trim() ? normalizeServerUrl(value) : "";
-        fs.mkdirSync(require("node:path").dirname(settingsPath()), { recursive: true });
-        fs.writeFileSync(settingsPath(), JSON.stringify({ serverUrl }, null, 2), "utf8");
+        fs.mkdirSync(dataDir(), { recursive: true });
+        fs.writeFileSync(settingsPath(), `${serverUrl}\n`, "utf8");
         return { serverUrl };
     }
 
