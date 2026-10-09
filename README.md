@@ -12,7 +12,7 @@ The computer form can capture hardware locally or from a remote Windows computer
 
 ## Push Mode
 
-Push Mode is available from the desktop login screen. Configure a receiver using its base address, such as `http://192.168.1.20:4783`; CHICTool checks `GET /push/health` before saving that address to `push.txt` in Electron's user data folder. Capture sends the local computer record to `POST /push` on that receiver.
+Push Mode is available from the desktop login screen. Configure a receiver using its base address, such as `http://192.168.1.20:4783`; CHICTool checks `GET /push/health` before saving that address to `data/push.txt` beside the packaged app. In development, the file remains in Electron's user data folder. Capture sends the local computer record to `POST /push` on that receiver.
 
 The receiving app queues submissions in memory and opens its Push inbox. A reviewer selects a device type and office, reviews the captured details, then saves or discards the submission. Saving requires signing in. The sender waits for that decision and reports the result. The receiver queue is cleared when the app exits, so submissions awaiting review should be handled before closing the receiver.
 

@@ -7,7 +7,12 @@ function createPushService({ app, getWindow, database, normalizeServerUrl }) {
     const results = new Map();
     const maxBodyBytes = 64 * 1024;
     const resultLifetimeMs = 10 * 60 * 1000;
-    const configPath = () => path.join(app.getPath("userData"), "push.txt");
+    const configPath = () => {
+        const dataDir = app.isPackaged
+            ? path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath("exe")), "data")
+            : app.getPath("userData");
+        return path.join(dataDir, "push.txt");
+    };
 
     function getConfig() {
         try { return { serverUrl: normalizeServerUrl(fs.readFileSync(configPath(), "utf8")) }; }
