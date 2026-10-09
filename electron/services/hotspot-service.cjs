@@ -5,7 +5,11 @@ const { randomInt } = require("node:crypto");
 function createHotspotService({ app, safeStorage, execFile, scanPort, powershellResource }) {
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const randomValue = (length) => Array.from({ length }, () => alphabet[randomInt(alphabet.length)]).join("");
-    const settingsPath = () => path.join(app.getPath("userData"), "hotspot-settings.json");
+    const dataDir = () => app.isPackaged
+        ? path.join(process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(app.getPath("exe")), "data")
+        : path.resolve(__dirname, "..", "..", "data");
+    const settingsPath = () => path.join(dataDir(), "hotspot.txt");
+    const legacySettingsPath = () => path.join(app.getPath("userData"), "hotspot-settings.json");
 
     function normalizeName(value) {
         const name = String(value || "").trim();
@@ -22,6 +26,26 @@ function createHotspotService({ app, safeStorage, execFile, scanPort, powershell
             saved = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
         } catch (error) {
             if (error.code !== "ENOENT") console.warn(`Could not read hotspot settings: ${error.message}`);
+            else {
+                // Migrate existing encrypted settings into the shared data folder.
+                try {
+                    const legacy = JSON.parse(fs.readFileSync(legacySettingsPath(), "utf8"));
+                    let legacyPassword = "";
+                    if (legacy.passwordEncrypted && safeStorage.isEncryptionAvailable()) {
+                        legacyPassword = safeStorage.decryptString(Buffer.from(legacy.passwordEncrypted, "base64"));
+                    }
+                    saved = { networkName: legacy.networkName, password: legacyPassword };
+                    fs.mkdirSync(dataDir(), { recursive: true });
+                    fs.writeFileSync(settingsPath(), JSON.stringify({
+                        networkName: saved.networkName,
+                        passwordEncrypted: legacyPassword && safeStorage.isEncryptionAvailable()
+                            ? safeStorage.encryptString(legacyPassword).toString("base64")
+                            : ""
+                    }, null, 2), "utf8");
+                } catch (legacyError) {
+                    if (legacyError.code !== "ENOENT") console.warn(`Could not migrate hotspot settings: ${legacyError.message}`);
+                }
+            }
         }
 
         let password = "";
@@ -32,6 +56,16 @@ function createHotspotService({ app, safeStorage, execFile, scanPort, powershell
             } catch (error) {
                 console.warn(`Could not decrypt saved hotspot password: ${error.message}`);
             }
+        } else if (typeof saved.password === "string" && saved.password) {
+            // Upgrade hotspot.txt files written by the previous plaintext format.
+            password = saved.password;
+            if (safeStorage.isEncryptionAvailable()) {
+                saved.passwordEncrypted = safeStorage.encryptString(password).toString("base64");
+            } else {
+                console.warn("Secure password storage is unavailable; removing the plaintext hotspot password from disk.");
+            }
+            delete saved.password;
+            fs.writeFileSync(settingsPath(), JSON.stringify(saved, null, 2), "utf8");
         }
 
         return {
@@ -50,7 +84,7 @@ function createHotspotService({ app, safeStorage, execFile, scanPort, powershell
 
         if (normalizedPassword && !safeStorage.isEncryptionAvailable()) throw new Error("Secure password storage is unavailable on this device.");
 
-        fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
+        fs.mkdirSync(dataDir(), { recursive: true });
         fs.writeFileSync(settingsPath(), JSON.stringify({
             networkName: normalizedName,
             passwordEncrypted: normalizedPassword ? safeStorage.encryptString(normalizedPassword).toString("base64") : ""
